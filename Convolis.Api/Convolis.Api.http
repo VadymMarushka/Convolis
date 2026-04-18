@@ -1,0 +1,6 @@
+@Convolis.Api_HostAddress = http://localhost:5116
+
+GET {{Convolis.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

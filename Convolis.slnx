@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="Convolis.Api/Convolis.Api.csproj" />
+  <Project Path="Convolis.Shared/Convolis.Shared.csproj" />
+  <Project Path="Convolis.UI/Convolis.UI.csproj" />
+</Solution>
