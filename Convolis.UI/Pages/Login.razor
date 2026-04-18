@@ -1,0 +1,143 @@
+@page "/login"
+@inject AuthService AuthService
+@inject AuthStateService AuthState
+@inject NavigationManager Nav
+
+<div class="min-vh-100 d-flex align-items-center justify-content-center bg-light">
+    <div class="card shadow-sm" style="width: 100%; max-width: 400px;">
+        <div class="card-body p-4">
+            <h4 class="mb-1 fw-bold">💬 Convolis</h4>
+            <p class="text-muted small mb-4">Real-time chat with sentiment analysis</p>
+
+            <ul class="nav nav-tabs mb-4">
+                <li class="nav-item">
+                    <button class="nav-link @(isLogin ? "active" : "")"
+                            @onclick="() => { isLogin = true; ClearErrors(); }">Login</button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link @(!isLogin ? "active" : "")"
+                            @onclick="() => { isLogin = false; ClearErrors(); }">Register</button>
+                </li>
+            </ul>
+
+            @if (error != null)
+            {
+                <div class="alert alert-danger py-2 small">@error</div>
+            }
+
+            <div class="mb-3">
+                <label class="form-label">Username</label>
+                <input class="form-control @(usernameError != null ? "is-invalid" : "")"
+                       @bind="username" @bind:event="oninput"
+                       @onkeydown="OnKeyDown"
+                       placeholder="3–32 characters" maxlength="32" />
+                @if (usernameError != null)
+                {
+                    <div class="invalid-feedback">@usernameError</div>
+                }
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Password</label>
+                <input class="form-control @(passwordError != null ? "is-invalid" : "")"
+                       type="password"
+                       @bind="password" @bind:event="oninput"
+                       @onkeydown="OnKeyDown"
+                       placeholder="@(isLogin ? "Enter password" : "At least 6 characters")" />
+                @if (passwordError != null)
+                {
+                    <div class="invalid-feedback">@passwordError</div>
+                }
+            </div>
+
+            <button class="btn btn-primary w-100" @onclick="Submit" disabled="@isLoading">
+                @if (isLoading)
+                {
+                    <span class="spinner-border spinner-border-sm me-2"></span>
+                }
+                @(isLogin ? "Login" : "Register")
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool isLogin = true;
+    private string username = "";
+    private string password = "";
+    private string? error;
+    private string? usernameError;
+    private string? passwordError;
+    private bool isLoading;
+
+    protected override void OnInitialized()
+    {
+        if (AuthState.IsAuthenticated)
+            Nav.NavigateTo("/");
+    }
+
+    private bool ValidateForm()
+    {
+        ClearErrors();
+        var valid = true;
+
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            usernameError = "Username is required.";
+            valid = false;
+        }
+        else if (username.Length < 3)
+        {
+            usernameError = "Username must be at least 3 characters.";
+            valid = false;
+        }
+        else if (username.Length > 32)
+        {
+            usernameError = "Username must be at most 32 characters.";
+            valid = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            passwordError = "Password is required.";
+            valid = false;
+        }
+        else if (!isLogin && password.Length < 6)
+        {
+            passwordError = "Password must be at least 6 characters.";
+            valid = false;
+        }
+
+        return valid;
+    }
+
+    private void ClearErrors()
+    {
+        error = null;
+        usernameError = null;
+        passwordError = null;
+    }
+
+    private async Task Submit()
+    {
+        if (!ValidateForm()) return;
+
+        isLoading = true;
+
+        var (success, err) = isLogin
+            ? await AuthService.LoginAsync(username, password)
+            : await AuthService.RegisterAsync(username, password);
+
+        isLoading = false;
+
+        if (success)
+            Nav.NavigateTo("/");
+        else
+            error = err ?? "Something went wrong.";
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Submit();
+    }
+}

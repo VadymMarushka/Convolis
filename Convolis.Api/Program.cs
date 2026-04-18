@@ -1,7 +1,8 @@
+using Convolis.Api.Hubs;
+using Microsoft.AspNetCore.SignalR;
 using Azure;
 using Azure.AI.TextAnalytics;
 using Convolis.Api.Data;
-using Convolis.Api.Hubs;
 using Convolis.Api.Services.Abstractions;
 using Convolis.Api.Services.Implementations;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -28,7 +29,7 @@ builder.Services.AddSwaggerGen(options =>
         Scheme = "Bearer",
         BearerFormat = "JWT",
         In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-        Description = "Встав сюди свій JWT токен (без слова Bearer)"
+        Description = "Введи сюди JWT токен (без слова Bearer)"
     });
 
     options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
@@ -63,6 +64,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 // Other services
+builder.Services.AddSingleton<IUserIdProvider, GuidUserIdProvider>();
 builder.Services.AddSignalR()
                 .AddAzureSignalR(builder.Configuration.GetConnectionString("AzureSignalR"));
 

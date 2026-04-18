@@ -35,6 +35,13 @@ namespace Convolis.Api.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Conversations");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("acb72d86-bb66-4b29-bbbc-c88f464fed23"),
+                            Name = "Global Chat 🌍"
+                        });
                 });
 
             modelBuilder.Entity("Convolis.Api.Data.Entities.Message", b =>

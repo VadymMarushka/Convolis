@@ -7,7 +7,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Convolis.Api.Services.Implementations
 {
-    // Інжектимо TextAnalyticsClient напряму
     public class MessageService(ConvolisDbContext context, TextAnalyticsClient aiClient) : IMessageService
     {
         public async Task<MessageDTO?> CreateMessageAsync(Guid senderId, Guid conversationId, string content)
@@ -22,7 +21,6 @@ namespace Convolis.Api.Services.Implementations
 
             string messageSentiment = "Neutral";
 
-            // Викликаємо AI (без створення нових підключень)
             if (!string.IsNullOrWhiteSpace(content))
             {
                 try
@@ -32,7 +30,7 @@ namespace Convolis.Api.Services.Implementations
                 }
                 catch (Exception)
                 {
-                    // Ігноруємо помилки AI, щоб чат не падав
+                    // Якщо, щось з AI-йкою піде не так - то буде просто Neutral
                 }
             }
 

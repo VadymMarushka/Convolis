@@ -1,0 +1,574 @@
+@page "/"
+@inject AuthStateService AuthState
+@inject AuthService AuthService
+@inject ChatService ChatService
+@inject HubService HubService
+@inject NavigationManager Nav
+@implements IAsyncDisposable
+
+<style>
+    .chat-layout {
+        height: 100vh;
+        display: flex;
+        overflow: hidden;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+        width: 320px;
+        min-width: 320px;
+        border-right: 1px solid #dee2e6;
+        display: flex;
+        flex-direction: column;
+        background: #fff;
+        transition: transform 0.25s ease;
+    }
+    .sidebar-header {
+        padding: 12px 16px;
+        border-bottom: 1px solid #dee2e6;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .conversation-list {
+        flex: 1;
+        overflow-y: auto;
+    }
+    .conversation-item {
+        padding: 10px 16px;
+        cursor: pointer;
+        border-bottom: 1px solid #f0f0f0;
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+    }
+    .conversation-item:hover { background: #f8f9fa; }
+    .conversation-item.active { background: #e7f1ff; }
+
+    .conv-avatar {
+        width: 44px; height: 44px;
+        border-radius: 50%;
+        background: #6c757d;
+        color: #fff;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 600; font-size: 16px;
+        flex-shrink: 0;
+    }
+    .conv-avatar.global { background: #0d6efd; }
+    .conv-body { flex: 1; min-width: 0; }
+    .conv-name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .conv-last-msg { font-size: 12px; color: #6c757d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .conv-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex-shrink: 0; }
+    .conv-time { font-size: 11px; color: #adb5bd; }
+
+    /* ── Main area ── */
+    .chat-main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        background: #f8f9fa;
+    }
+    .chat-header {
+        padding: 12px 20px;
+        background: #fff;
+        border-bottom: 1px solid #dee2e6;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .chat-header-info { flex: 1; }
+    .chat-header-name { font-weight: 600; font-size: 15px; }
+    .chat-header-sub { font-size: 12px; color: #6c757d; }
+
+    .messages-area {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    /* ── Bubbles ── */
+    .message-group {
+        display: flex;
+        flex-direction: column;
+        max-width: 65%;
+    }
+    .message-group.own { align-self: flex-end; align-items: flex-end; }
+    .message-group.other { align-self: flex-start; align-items: flex-start; }
+    .msg-sender { font-size: 11px; font-weight: 600; color: #0d6efd; margin-bottom: 2px; padding: 0 4px; }
+    .bubble {
+        padding: 8px 12px;
+        border-radius: 16px;
+        font-size: 14px;
+        line-height: 1.45;
+        word-break: break-word;
+    }
+    .own .bubble { background: #0d6efd; color: #fff; border-bottom-right-radius: 4px; }
+    .other .bubble { background: #fff; border: 1px solid #e9ecef; border-bottom-left-radius: 4px; }
+    .bubble.sentiment-positive { border-left: 3px solid #198754; }
+    .bubble.sentiment-negative { border-left: 3px solid #dc3545; }
+    .own .bubble.sentiment-positive { border-left: none; border-right: 3px solid rgba(255,255,255,0.5); }
+    .own .bubble.sentiment-negative { border-left: none; border-right: 3px solid rgba(255,100,100,0.5); }
+    .msg-footer { display: flex; align-items: center; gap: 5px; margin-top: 2px; padding: 0 4px; }
+    .msg-time { font-size: 11px; color: #adb5bd; }
+    .sentiment-badge { font-size: 10px; padding: 1px 5px; border-radius: 8px; font-weight: 500; }
+    .sentiment-badge.positive { background: #d1e7dd; color: #0f5132; }
+    .sentiment-badge.negative { background: #f8d7da; color: #842029; }
+    .sentiment-badge.neutral  { background: #e9ecef; color: #495057; }
+
+    /* ── Input ── */
+    .chat-input-area {
+        padding: 12px 16px;
+        background: #fff;
+        border-top: 1px solid #dee2e6;
+        display: flex;
+        gap: 8px;
+        align-items: flex-end;
+    }
+    .chat-input-area textarea { flex: 1; resize: none; max-height: 120px; border-radius: 20px; padding: 8px 14px; font-size: 14px; }
+
+    .empty-state {
+        flex: 1; display: flex; align-items: center; justify-content: center;
+        flex-direction: column; gap: 8px; color: #adb5bd;
+    }
+
+    /* ── Mobile ── */
+    @@media (max-width: 768px) {
+        .sidebar {
+            position: fixed;
+            top: 0; left: 0; bottom: 0;
+            z-index: 1040;
+            width: 100vw;
+            transform: translateX(-100%);
+        }
+        .sidebar.mobile-open {
+            transform: translateX(0);
+        }
+        .chat-main {
+            width: 100vw;
+        }
+        .btn-back {
+            display: flex !important;
+        }
+        .message-group {
+            max-width: 85%;
+        }
+    }
+    .btn-back { display: none; }
+</style>
+
+@if (!AuthState.IsAuthenticated)
+{
+    return;
+}
+
+<div class="chat-layout">
+
+    <!-- ═══ SIDEBAR ═══ -->
+    <div class="sidebar @(sidebarOpen ? "mobile-open" : "")">
+        <div class="sidebar-header">
+            <div>
+                <div class="fw-semibold">Hello, @AuthState.Username 👋</div>
+                <div class="text-muted small">@conversations.Count conversation(s)</div>
+            </div>
+            <div class="d-flex gap-1">
+                <button class="btn btn-outline-primary btn-sm" @onclick="() => { showNewChat = !showNewChat; newChatError = null; }" title="New chat">✏️</button>
+                <button class="btn btn-outline-secondary btn-sm" @onclick="Logout" title="Logout">↩</button>
+            </div>
+        </div>
+
+        @if (showNewChat)
+        {
+            <div class="p-2 border-bottom d-flex gap-2">
+                <input class="form-control form-control-sm" placeholder="Username..."
+                       @bind="newChatUsername" @onkeydown="OnNewChatKeyDown" />
+                <button class="btn btn-primary btn-sm" @onclick="CreateChat">Go</button>
+            </div>
+        }
+        @if (newChatError != null)
+        {
+            <div class="alert alert-danger py-1 px-2 m-1 small">@newChatError</div>
+        }
+
+        <div class="conversation-list">
+            @if (isLoadingConversations)
+            {
+                <div class="text-center p-4"><div class="spinner-border spinner-border-sm text-secondary"></div></div>
+            }
+            else
+            {
+                @foreach (var conv in conversations)
+                {
+                    var isGlobal = conv.Id == GlobalChatId;
+                    var initial = conv.Name.Length > 0 ? conv.Name[0].ToString().ToUpper() : "?";
+
+
+                    <div class="conversation-item @(selectedConvId == conv.Id ? "active" : "")"
+                         @onclick="() => SelectConversation(conv)">
+                        <div class="conv-avatar @(isGlobal ? "global" : "")">
+                            @if (isGlobal) { <span>🌍</span> } else { @initial }
+                        </div>
+                        <div class="conv-body">
+                            <div class="d-flex align-items-center gap-1 flex-wrap">
+                                <span class="conv-name">@conv.Name</span>
+                                @if (!isGlobal)
+                                {
+                                    // onlineCount includes current user, so "other is online" means >= 2
+                                    var otherOnline = onlineCounts.GetValueOrDefault(conv.Id) >= 2;
+                                    <span class="badge rounded-pill @(otherOnline ? "bg-success" : "bg-secondary")"
+                                          style="font-size:9px; padding: 2px 6px;">
+                                        @(otherOnline ? "online" : "offline")
+                                    </span>
+                                }
+                            </div>
+                            @if (conv.LastMessageContent != null)
+                            {
+                                <div class="conv-last-msg">@SentimentEmoji(conv.LastMessageSentiment) @conv.LastMessageContent</div>
+                            }
+                            else
+                            {
+                                <div class="conv-last-msg text-muted">No messages yet</div>
+                            }
+                        </div>
+                        <div class="conv-meta">
+                            @if (conv.LastMessageTimestamp != null)
+                            {
+                                <span class="conv-time">@FormatTime(conv.LastMessageTimestamp.Value)</span>
+                            }
+                            @if (isGlobal)
+                            {
+                                <span class="badge bg-light text-secondary border" style="font-size:9px;">
+                                    @conv.OnlineCount online
+                                </span>
+                            }
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+
+    <!-- Mobile backdrop -->
+    @if (sidebarOpen)
+    {
+        <div class="d-md-none position-fixed top-0 start-0 w-100 h-100"
+             style="background:rgba(0,0,0,0.4); z-index:1039;"
+             @onclick="() => sidebarOpen = false"></div>
+    }
+
+    <!-- ═══ MAIN AREA ═══ -->
+    <div class="chat-main">
+        @if (selectedConv == null)
+        {
+            <!-- Mobile: show open-sidebar button -->
+            <div class="d-md-none p-2 border-bottom bg-white d-flex align-items-center gap-2">
+                <button class="btn btn-outline-secondary btn-sm" @onclick="() => sidebarOpen = true">☰</button>
+                <span class="fw-semibold">Convolis</span>
+            </div>
+            <div class="empty-state">
+                <span style="font-size: 48px;">💬</span>
+                <div class="fw-semibold text-secondary">Select a conversation</div>
+                <div class="small">or start a new one with the ✏️ button</div>
+            </div>
+        }
+        else
+        {
+            var isGlobal = selectedConv.Id == GlobalChatId;
+            var convInList = conversations.FirstOrDefault(c => c.Id == selectedConv.Id);
+            var onlineCount = onlineCounts.GetValueOrDefault(selectedConv.Id);
+
+            <div class="chat-header">
+                <!-- Back button (mobile) -->
+                <button class="btn btn-outline-secondary btn-sm btn-back me-1"
+                        @onclick="() => { sidebarOpen = true; }">←</button>
+
+                <div class="conv-avatar @(isGlobal ? "global" : "")" style="width:36px;height:36px;font-size:14px;">
+                    @if (isGlobal) { <span>🌍</span> }
+                    else { @(selectedConv.Name.Length > 0 ? selectedConv.Name[0].ToString().ToUpper() : "?") }
+                </div>
+                <div class="chat-header-info">
+                    <div class="chat-header-name">@selectedConv.Name</div>
+                    @if (isGlobal)
+                    {
+                        <div class="chat-header-sub">
+                            @(convInList?.ParticipantsCount ?? 0) members · @onlineCount online
+                        </div>
+                    }
+                    else
+                    {
+                        var otherOnlineInHeader = onlineCount >= 2;
+                        <div class="chat-header-sub @(otherOnlineInHeader ? "text-success" : "")">
+                            @(otherOnlineInHeader ? "Online" : "Offline")
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="messages-area" @ref="messagesRef">
+                @if (isLoadingMessages)
+                {
+                    <div class="text-center p-4"><div class="spinner-border spinner-border-sm text-secondary"></div></div>
+                }
+                else if (currentMessages.Count == 0)
+                {
+                    <div class="text-center text-muted small py-4">No messages yet. Say hi! 👋</div>
+                }
+                else
+                {
+                    @foreach (var msg in currentMessages)
+                    {
+                        var isOwn = msg.SenderId == AuthState.UserId;
+                        var sentimentClass = msg.Sentiment?.ToLower() switch
+                        {
+                            "positive" => "positive",
+                            "negative" => "negative",
+                            _ => "neutral"
+                        };
+                        <div class="message-group @(isOwn ? "own" : "other")">
+                            @if (!isOwn)
+                            {
+                                <div class="msg-sender">@msg.SenderName</div>
+                            }
+                            <div class="bubble sentiment-@sentimentClass">@msg.Content</div>
+                            <div class="msg-footer">
+                                <span class="msg-time">@FormatTime(msg.Timestamp)</span>
+                                <span class="sentiment-badge @sentimentClass">
+                                    @SentimentEmoji(msg.Sentiment) @msg.Sentiment
+                                </span>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+
+            <div class="chat-input-area">
+                <textarea class="form-control" rows="1" placeholder="Write a message..."
+                          @bind="messageText" @bind:event="oninput"
+                          @onkeydown="OnMessageKeyDown"></textarea>
+                <button class="btn btn-primary px-3" @onclick="SendMessage" disabled="@isSending">
+                    @if (isSending) { <span class="spinner-border spinner-border-sm"></span> }
+                    else { <span>➤</span> }
+                </button>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private static readonly Guid GlobalChatId = new Guid("acb72d86-bb66-4b29-bbbc-c88f464fed23");
+
+    private List<ConversationDTO> conversations = new();
+    private Dictionary<Guid, int> onlineCounts = new();
+
+    private ConversationDetailsDTO? selectedConv;
+    private Guid? selectedConvId;
+    private List<MessageDTO> currentMessages = new();
+
+    private bool isLoadingConversations = true;
+    private bool isLoadingMessages;
+    private bool isSending;
+    private bool sidebarOpen = false;
+
+    private string messageText = "";
+    private string newChatUsername = "";
+    private string? newChatError;
+    private bool showNewChat;
+
+    private ElementReference messagesRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthState.IsAuthenticated)
+        {
+            Nav.NavigateTo("/login");
+            return;
+        }
+
+        await LoadConversationsAsync();
+
+        HubService.OnMessageReceived += OnMessageReceived;
+        HubService.OnConversationStatusUpdated += OnStatusUpdated;
+        HubService.OnConversationCreated += OnConversationCreated;
+        HubService.OnReconnected += OnHubReconnected;
+        await HubService.StartAsync();
+    }
+
+    private async Task LoadConversationsAsync()
+    {
+        isLoadingConversations = true;
+        conversations = await ChatService.GetConversationsAsync();
+        onlineCounts.Clear();
+        foreach (var c in conversations)
+            onlineCounts[c.Id] = c.OnlineCount;
+        isLoadingConversations = false;
+    }
+
+    private async Task SelectConversation(ConversationDTO conv)
+    {
+        if (selectedConvId == conv.Id)
+        {
+            sidebarOpen = false;
+            return;
+        }
+
+        selectedConvId = conv.Id;
+        isLoadingMessages = true;
+        currentMessages.Clear();
+        sidebarOpen = false; // close sidebar on mobile after selecting
+        StateHasChanged();
+
+        var details = await ChatService.GetConversationAsync(conv.Id);
+        if (details != null)
+        {
+            selectedConv = details;
+            currentMessages = details.Messages;
+        }
+
+        isLoadingMessages = false;
+        StateHasChanged();
+        await ScrollToBottomAsync();
+    }
+
+    private async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(messageText) || selectedConv == null) return;
+        isSending = true;
+        var text = messageText.Trim();
+        messageText = "";
+        await ChatService.SendMessageAsync(selectedConv.Id, text);
+        isSending = false;
+    }
+
+    private async Task OnMessageKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey)
+            await SendMessage();
+    }
+
+    private void OnMessageReceived(MessageDTO msg)
+    {
+        var conv = conversations.FirstOrDefault(c => c.Id == msg.ConversationId);
+        if (conv != null)
+        {
+            conv.LastMessageContent = msg.Content;
+            conv.LastMessageTimestamp = msg.Timestamp;
+            conv.LastMessageSentiment = msg.Sentiment;
+        }
+
+        if (selectedConv?.Id == msg.ConversationId)
+            currentMessages.Add(msg);
+
+        InvokeAsync(async () =>
+        {
+            StateHasChanged();
+            if (selectedConv?.Id == msg.ConversationId)
+                await ScrollToBottomAsync();
+        });
+    }
+
+    private void OnStatusUpdated(Guid convId, int onlineCount, int membersCount)
+    {
+        onlineCounts[convId] = onlineCount;
+        var conv = conversations.FirstOrDefault(c => c.Id == convId);
+        if (conv != null)
+        {
+            conv.OnlineCount = onlineCount;
+            if (membersCount >= 0)
+                conv.ParticipantsCount = membersCount;
+        }
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CreateChat()
+    {
+        newChatError = null;
+        if (string.IsNullOrWhiteSpace(newChatUsername)) return;
+
+        var conv = await ChatService.CreateConversationAsync(newChatUsername.Trim());
+        if (conv == null)
+        {
+            newChatError = "User not found or you can't chat with yourself.";
+            return;
+        }
+
+        showNewChat = false;
+        newChatUsername = "";
+
+        // Restart hub so this user joins the new conversation group
+        // This also updates online counts for all chats
+        await HubService.RestartAsync();
+
+        // Reload conversations to get fresh OnlineCount for the new chat
+        await LoadConversationsAsync();
+
+        // Select the newly created conversation
+        var fresh = conversations.FirstOrDefault(c => c.Id == conv.Id);
+        if (fresh != null)
+            await SelectConversation(fresh);
+    }
+
+    private async Task OnNewChatKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await CreateChat();
+    }
+
+    private async Task Logout()
+    {
+        await HubService.StopAsync();
+        await AuthState.ClearAsync();
+        Nav.NavigateTo("/login");
+    }
+
+    private async Task ScrollToBottomAsync()
+    {
+        try { await Task.Delay(50); } catch { }
+    }
+
+    private static string FormatTime(DateTime dt)
+    {
+        var local = dt.ToLocalTime();
+        return local.Date == DateTime.Today ? local.ToString("HH:mm") : local.ToString("dd.MM HH:mm");
+    }
+
+    private static string SentimentEmoji(string? sentiment) => sentiment?.ToLower() switch
+    {
+        "positive" => "😊",
+        "negative" => "😞",
+        _ => "😐"
+    };
+
+    // When someone creates a chat with us — restart hub and reload so we join the group
+    private void OnConversationCreated(Guid convId)
+    {
+        InvokeAsync(async () =>
+        {
+            // Restart hub first so we get added to the new conversation group
+            await HubService.RestartAsync();
+            await LoadConversationsAsync();
+            StateHasChanged();
+        });
+    }
+
+    // On SignalR reconnect — refresh online counts
+    private void OnHubReconnected()
+    {
+        InvokeAsync(async () =>
+        {
+            var fresh = await ChatService.GetConversationsAsync();
+            foreach (var c in fresh)
+                onlineCounts[c.Id] = c.OnlineCount;
+            StateHasChanged();
+        });
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        HubService.OnMessageReceived -= OnMessageReceived;
+        HubService.OnConversationStatusUpdated -= OnStatusUpdated;
+        HubService.OnConversationCreated -= OnConversationCreated;
+        HubService.OnReconnected -= OnHubReconnected;
+    }
+}

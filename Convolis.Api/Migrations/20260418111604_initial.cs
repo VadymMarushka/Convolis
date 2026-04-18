@@ -90,6 +90,11 @@ namespace Convolis.Api.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
+            migrationBuilder.InsertData(
+                table: "Conversations",
+                columns: new[] { "Id", "Name" },
+                values: new object[] { new Guid("acb72d86-bb66-4b29-bbbc-c88f464fed23"), "Global Chat 🌍" });
+
             migrationBuilder.CreateIndex(
                 name: "IX_Messages_ConversationId",
                 table: "Messages",
