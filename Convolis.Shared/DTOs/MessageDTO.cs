@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Convolis.Shared.DTOs
+﻿namespace Convolis.Shared.DTOs
 {
     public class MessageDTO
     {
@@ -12,6 +6,8 @@ namespace Convolis.Shared.DTOs
         public string SenderName { get; set; } = string.Empty;
         public Guid SenderId { get; set; }
         public Guid ConversationId { get; set; }
+
+        // Default fallback if Azure Text Analytics fails or is disabled
         public string Sentiment { get; set; } = "Neutral";
         public DateTime Timestamp { get; set; }
     }

@@ -13,6 +13,9 @@ using System.Text;
 
 namespace Convolis.Api.Services.Implementations
 {
+    /// <summary>
+    /// Handles user authentication, registration, and JWT token management.
+    /// </summary>
     public class AuthService(ConvolisDbContext context, IConfiguration configuration) : IAuthService
     {
         private const int MinUsernameLength = 3;
@@ -40,8 +43,10 @@ namespace Convolis.Api.Services.Implementations
             if (await context.Users.AnyAsync(u => u.Username == request.Username))
                 return (null, "This username is already taken.");
 
+            // Ensure the Global Chat exists before adding a new user
             var globalChatExists = await context.Conversations
                 .AnyAsync(c => c.Id == ConvolisDbContext.GlobalChatId);
+
             if (!globalChatExists)
             {
                 context.Conversations.Add(new Conversation
@@ -56,6 +61,8 @@ namespace Convolis.Api.Services.Implementations
             user.PasswordHash = new PasswordHasher<User>().HashPassword(user, request.Password);
 
             context.Users.Add(user);
+
+            // Automatically assign every newly registered user to the Global Chat
             context.Participants.Add(new Participant
             {
                 UserId = user.Id,
@@ -73,7 +80,7 @@ namespace Convolis.Api.Services.Implementations
             return await GetTokenResponse(user);
         }
 
-        // ── Helpers ──────────────────────────────────────────
+        // === Helpers ===
 
         private static bool ValidateCredentials(UserDTO request, out string? error)
         {
@@ -117,6 +124,7 @@ namespace Convolis.Api.Services.Implementations
             return user;
         }
 
+        // Generates a cryptographically secure random string for the refresh token
         private string GenerateRefreshToken()
         {
             var bytes = new byte[32];

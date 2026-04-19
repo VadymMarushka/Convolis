@@ -12,11 +12,15 @@
             <ul class="nav nav-tabs mb-4">
                 <li class="nav-item">
                     <button class="nav-link @(isLogin ? "active" : "")"
-                            @onclick="() => { isLogin = true; ClearErrors(); }">Login</button>
+                            @onclick="() => { isLogin = true; ClearErrors(); }">
+                        Login
+                    </button>
                 </li>
                 <li class="nav-item">
                     <button class="nav-link @(!isLogin ? "active" : "")"
-                            @onclick="() => { isLogin = false; ClearErrors(); }">Register</button>
+                            @onclick="() => { isLogin = false; ClearErrors(); }">
+                        Register
+                    </button>
                 </li>
             </ul>
 
@@ -27,10 +31,12 @@
 
             <div class="mb-3">
                 <label class="form-label">Username</label>
-                <input class="form-control @(usernameError != null ? "is-invalid" : "")"
+                <input type="text"
+                       class="form-control @(usernameError != null ? "is-invalid" : "")"
                        @bind="username" @bind:event="oninput"
                        @onkeydown="OnKeyDown"
-                       placeholder="3–32 characters" maxlength="32" />
+                       placeholder="3–32 characters" maxlength="32"
+                       autocomplete="username" />
                 @if (usernameError != null)
                 {
                     <div class="invalid-feedback">@usernameError</div>
@@ -39,11 +45,12 @@
 
             <div class="mb-3">
                 <label class="form-label">Password</label>
-                <input class="form-control @(passwordError != null ? "is-invalid" : "")"
-                       type="password"
+                <input type="password"
+                       class="form-control @(passwordError != null ? "is-invalid" : "")"
                        @bind="password" @bind:event="oninput"
                        @onkeydown="OnKeyDown"
-                       placeholder="@(isLogin ? "Enter password" : "At least 6 characters")" />
+                       placeholder="@(isLogin ? "Enter password" : "At least 6 characters")"
+                       autocomplete="@(isLogin ? "current-password" : "new-password")" />
                 @if (passwordError != null)
                 {
                     <div class="invalid-feedback">@passwordError</div>
@@ -72,6 +79,7 @@
 
     protected override void OnInitialized()
     {
+        // Prevent authenticated users from accessing the login page
         if (AuthState.IsAuthenticated)
             Nav.NavigateTo("/");
     }
@@ -80,18 +88,19 @@
     {
         ClearErrors();
         var valid = true;
+        var trimmedUsername = username.Trim();
 
-        if (string.IsNullOrWhiteSpace(username))
+        if (string.IsNullOrWhiteSpace(trimmedUsername))
         {
             usernameError = "Username is required.";
             valid = false;
         }
-        else if (username.Length < 3)
+        else if (trimmedUsername.Length < 3)
         {
             usernameError = "Username must be at least 3 characters.";
             valid = false;
         }
-        else if (username.Length > 32)
+        else if (trimmedUsername.Length > 32)
         {
             usernameError = "Username must be at most 32 characters.";
             valid = false;
@@ -123,17 +132,18 @@
         if (!ValidateForm()) return;
 
         isLoading = true;
+        var cleanUsername = username.Trim();
 
         var (success, err) = isLogin
-            ? await AuthService.LoginAsync(username, password)
-            : await AuthService.RegisterAsync(username, password);
+            ? await AuthService.LoginAsync(cleanUsername, password)
+            : await AuthService.RegisterAsync(cleanUsername, password);
 
         isLoading = false;
 
         if (success)
             Nav.NavigateTo("/");
         else
-            error = err ?? "Something went wrong.";
+            error = err ?? "Something went wrong. Please try again.";
     }
 
     private async Task OnKeyDown(KeyboardEventArgs e)

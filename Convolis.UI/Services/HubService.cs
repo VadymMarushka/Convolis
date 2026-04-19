@@ -1,14 +1,18 @@
 using Convolis.Shared.DTOs;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Configuration;
+using System.Text.Json;
 
 namespace Convolis.UI.Services
 {
-    public class HubService : IAsyncDisposable
+    /// <summary>
+    /// Manages the real-time SignalR connection, handling incoming messages, 
+    /// status updates, and conversation notifications.
+    /// </summary>
+    public class HubService(AuthStateService authState, IConfiguration config) : IAsyncDisposable
     {
-        private readonly AuthStateService _authState;
-        private readonly IConfiguration _config;
         private HubConnection? _connection;
+        private bool _isStarting;
 
         public event Action<MessageDTO>? OnMessageReceived;
         public event Action<Guid, int, int>? OnConversationStatusUpdated;
@@ -17,72 +21,84 @@ namespace Convolis.UI.Services
 
         public bool IsConnected => _connection?.State == HubConnectionState.Connected;
 
-        public HubService(AuthStateService authState, IConfiguration config)
-        {
-            _authState = authState;
-            _config = config;
-        }
-
+        /// <summary>
+        /// Initializes and starts the SignalR connection if it's not already active.
+        /// </summary>
         public async Task StartAsync()
         {
-            if (_connection != null) return;
+            if (_connection != null || _isStarting) return;
 
-            var baseUrl = _config["ApiBaseUrl"]!;
+            _isStarting = true;
+            try
+            {
+                var baseUrl = config["ApiBaseUrl"] ?? "https://localhost:5001";
 
-            _connection = new HubConnectionBuilder()
-                .WithUrl($"{baseUrl}/chathub", options =>
+                _connection = new HubConnectionBuilder()
+                    .WithUrl($"{baseUrl}/chathub", options =>
+                    {
+                        // Dynamically provide the latest token for every connection attempt
+                        options.AccessTokenProvider = () => Task.FromResult(authState.AccessToken);
+                    })
+                    .WithAutomaticReconnect()
+                    .Build();
+
+                // Handler: New message received
+                _connection.On<MessageDTO>("ReceiveMessage", msg => OnMessageReceived?.Invoke(msg));
+
+                // Handler: Conversation online status or participant count changed
+                _connection.On<JsonElement>("UpdateConversationStatus", json =>
                 {
-                    options.AccessTokenProvider = () =>
-                        Task.FromResult(_authState.AccessToken);
-                })
-                .WithAutomaticReconnect()
-                .Build();
+                    try
+                    {
+                        var convId = json.GetProperty("conversationId").GetGuid();
+                        var online = json.GetProperty("onlineCount").GetInt32();
+                        var members = json.TryGetProperty("participantsCount", out var mc) ? mc.GetInt32() : -1;
 
-            _connection.On<MessageDTO>("ReceiveMessage", msg =>
-            {
-                OnMessageReceived?.Invoke(msg);
-            });
+                        OnConversationStatusUpdated?.Invoke(convId, online, members);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error parsing status update: {ex.Message}");
+                    }
+                });
 
-            _connection.On<object>("UpdateConversationStatus", data =>
-            {
-                if (data is System.Text.Json.JsonElement json)
+                // Handler: Another user created a conversation with us
+                _connection.On<Guid>("ConversationCreated", convId => OnConversationCreated?.Invoke(convId));
+
+                // Handle automatic reconnection logic
+                _connection.Reconnected += _ =>
                 {
-                    var convId = json.GetProperty("conversationId").GetGuid();
-                    var online = json.GetProperty("onlineCount").GetInt32();
-                    var members = json.TryGetProperty("participantsCount", out var mc)
-                        ? mc.GetInt32() : -1;
-                    OnConversationStatusUpdated?.Invoke(convId, online, members);
-                }
-            });
+                    OnReconnected?.Invoke();
+                    return Task.CompletedTask;
+                };
 
-            // Server notifies this user that someone started a chat with them
-            _connection.On<Guid>("ConversationCreated", convId =>
+                await _connection.StartAsync();
+                Console.WriteLine("SignalR: Connected.");
+            }
+            catch (Exception ex)
             {
-                OnConversationCreated?.Invoke(convId);
-            });
-
-            // On reconnect — reload conversations so nothing is stale
-            _connection.Reconnected += _ =>
+                Console.WriteLine($"SignalR Connection Error: {ex.Message}");
+            }
+            finally
             {
-                OnReconnected?.Invoke();
-                return Task.CompletedTask;
-            };
-
-            await _connection.StartAsync();
+                _isStarting = false;
+            }
         }
 
-        // Call this after a new conversation is created so the hub re-joins all groups
+        /// <summary>
+        /// Restarts the hub connection. Useful for forcing the user into new SignalR groups 
+        /// (e.g., after joining a new conversation).
+        /// </summary>
         public async Task RestartAsync()
         {
-            if (_connection != null)
-            {
-                await _connection.StopAsync();
-                await _connection.DisposeAsync();
-                _connection = null;
-            }
+            Console.WriteLine("SignalR: Restarting...");
+            await StopAsync();
             await StartAsync();
         }
 
+        /// <summary>
+        /// Safely stops and disposes of the current connection.
+        /// </summary>
         public async Task StopAsync()
         {
             if (_connection != null)

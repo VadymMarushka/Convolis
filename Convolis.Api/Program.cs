@@ -29,7 +29,7 @@ builder.Services.AddSwaggerGen(options =>
         Scheme = "Bearer",
         BearerFormat = "JWT",
         In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-        Description = "Введи сюди JWT токен (без слова Bearer)"
+        Description = "Enter your JWT token (without the word Bearer)"
     });
 
     options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
@@ -47,7 +47,7 @@ builder.Services.AddSwaggerGen(options =>
         }
     });
 });
-// Authentification
+// Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -63,8 +63,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-// Other services
-builder.Services.AddSingleton<IUserIdProvider, GuidUserIdProvider>();
+// Azure SignalR configuration
 builder.Services.AddSignalR()
                 .AddAzureSignalR(builder.Configuration.GetConnectionString("AzureSignalR"));
 
@@ -81,7 +80,7 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Azure AI-йка
+// Azure Cognitive Services (Text Analytics)
 builder.Services.AddSingleton(sp =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
@@ -91,6 +90,8 @@ builder.Services.AddSingleton(sp =>
     return new TextAnalyticsClient(new Uri(endpoint), new AzureKeyCredential(key));
 });
 
+// Other services
+builder.Services.AddSingleton<IUserIdProvider, GuidUserIdProvider>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IConversationService, ConversationService>();
 builder.Services.AddScoped<IMessageService, MessageService>();
@@ -107,6 +108,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseCors("AllowBlazorWasm");
 app.UseAuthorization();
+// Setting up the chat hub
 app.MapHub<ChatHub>("/chathub");
 app.MapControllers();
 

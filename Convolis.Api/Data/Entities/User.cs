@@ -1,5 +1,8 @@
 ﻿namespace Convolis.Api.Data.Entities
 {
+    /// <summary>
+    /// Represents an application user.
+    /// </summary>
     public class User
     {
         public Guid Id { get; set; }
@@ -8,10 +11,14 @@
         public string? RefreshToken { get; set; }
         public DateTime? RefreshTokenExpiryTime { get; set; }
 
-        // Collection of conversations this specific is user is a part of (Many-to-Many)
+        /// <summary>
+        /// Collection of conversations this specific user is a part of (Many-to-Many).
+        /// </summary>
         public ICollection<Participant> Participants { get; set; } = new List<Participant>();
 
-        // Collection of the Messages this specific user's sent (One-to-Many)
+        /// <summary>
+        /// Collection of the messages this specific user has sent (One-to-Many).
+        /// </summary>
         public ICollection<Message> SentMessages { get; set; } = new List<Message>();
     }
 }

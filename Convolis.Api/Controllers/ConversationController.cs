@@ -8,6 +8,9 @@ using System.Security.Claims;
 
 namespace Convolis.Api.Controllers
 {
+    /// <summary>
+    /// Manages chat conversations, including creation, retrieval, and real-time notifications via SignalR.
+    /// </summary>
     [Route("api/[controller]")]
     [ApiController]
     [Authorize]
@@ -15,6 +18,10 @@ namespace Convolis.Api.Controllers
         IConversationService conversationService,
         IHubContext<ChatHub> hubContext) : ControllerBase
     {
+        /// <summary>
+        /// Retrieves all conversations for the currently authenticated user.
+        /// </summary>
+        /// <returns>A list of conversation summaries including online counts.</returns>
         [HttpGet]
         public async Task<ActionResult<List<ConversationDTO>>> GetMyConversations()
         {
@@ -23,6 +30,11 @@ namespace Convolis.Api.Controllers
             return Ok(await conversationService.GetUserConversationsAsync(userId.Value));
         }
 
+        /// <summary>
+        /// Retrieves the full details and message history of a specific conversation.
+        /// </summary>
+        /// <param name="id">The unique identifier of the conversation.</param>
+        /// <returns>The conversation details, or a 404 Not Found if it doesn't exist.</returns>
         [HttpGet("{id}")]
         public async Task<ActionResult<ConversationDetailsDTO>> GetConversation(Guid id)
         {
@@ -32,6 +44,11 @@ namespace Convolis.Api.Controllers
             return Ok(conversation);
         }
 
+        /// <summary>
+        /// Creates a new 1-on-1 chat with another user by their username.
+        /// </summary>
+        /// <param name="targetUsername">The username of the target user.</param>
+        /// <returns>The newly created conversation data, or a 400 Bad Request if validation fails.</returns>
         [HttpPost]
         public async Task<ActionResult<ConversationDTO>> CreateChat([FromQuery] string targetUsername)
         {
@@ -47,7 +64,8 @@ namespace Convolis.Api.Controllers
             if (newConversation == null)
                 return BadRequest("User not found or you cannot chat with yourself.");
 
-            // Notify the target user in real-time so the chat appears without reload
+            // Trigger a real-time SignalR event to the target user's active connections 
+            // so the new chat appears in their UI instantly without requiring a page reload.
             if (targetUserId.HasValue)
             {
                 await hubContext.Clients

@@ -4,22 +4,16 @@ using System.Net.Http.Json;
 
 namespace Convolis.UI.Services
 {
-    public class AuthService
+    /// <summary>
+    /// Handles user authentication, registration, and token management via the backend API.
+    /// </summary>
+    public class AuthService(HttpClient http, AuthStateService authState)
     {
-        private readonly HttpClient _http;
-        private readonly AuthStateService _authState;
-
-        public AuthService(HttpClient http, AuthStateService authState)
-        {
-            _http = http;
-            _authState = authState;
-        }
-
         public async Task<(bool success, string? error)> LoginAsync(string username, string password)
         {
             try
             {
-                var response = await _http.PostAsJsonAsync("api/auth/login", new UserDTO
+                var response = await http.PostAsJsonAsync("api/auth/login", new UserDTO
                 {
                     Username = username,
                     Password = password
@@ -33,7 +27,7 @@ namespace Convolis.UI.Services
 
                 var tokens = await response.Content.ReadFromJsonAsync<TokenResponseDTO>();
                 if (tokens != null)
-                    await _authState.SetTokensAsync(tokens);
+                    await authState.SetTokensAsync(tokens);
 
                 return (true, null);
             }
@@ -47,7 +41,7 @@ namespace Convolis.UI.Services
         {
             try
             {
-                var response = await _http.PostAsJsonAsync("api/auth/register", new UserDTO
+                var response = await http.PostAsJsonAsync("api/auth/register", new UserDTO
                 {
                     Username = username,
                     Password = password
@@ -61,7 +55,7 @@ namespace Convolis.UI.Services
 
                 var tokens = await response.Content.ReadFromJsonAsync<TokenResponseDTO>();
                 if (tokens != null)
-                    await _authState.SetTokensAsync(tokens);
+                    await authState.SetTokensAsync(tokens);
 
                 return (true, null);
             }
@@ -71,24 +65,27 @@ namespace Convolis.UI.Services
             }
         }
 
+        /// <summary>
+        /// Attempts to silently refresh the JWT access token using the stored refresh token.
+        /// </summary>
         public async Task<bool> TryRefreshAsync()
         {
-            if (_authState.UserId == null || string.IsNullOrEmpty(_authState.RefreshToken))
+            if (authState.UserId == null || string.IsNullOrEmpty(authState.RefreshToken))
                 return false;
 
             try
             {
-                var response = await _http.PostAsJsonAsync("api/auth/refresh-token", new RefreshTokenRequestDTO
+                var response = await http.PostAsJsonAsync("api/auth/refresh-token", new RefreshTokenRequestDTO
                 {
-                    Id = _authState.UserId.Value,
-                    RefreshToken = _authState.RefreshToken
+                    Id = authState.UserId.Value,
+                    RefreshToken = authState.RefreshToken
                 });
 
                 if (!response.IsSuccessStatusCode) return false;
 
                 var tokens = await response.Content.ReadFromJsonAsync<TokenResponseDTO>();
                 if (tokens != null)
-                    await _authState.SetTokensAsync(tokens);
+                    await authState.SetTokensAsync(tokens);
 
                 return true;
             }

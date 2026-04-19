@@ -3,22 +3,20 @@ using System.Net.Http.Headers;
 
 namespace Convolis.UI.Http
 {
-    public class AuthenticatedHttpHandler : DelegatingHandler
+    /// <summary>
+    /// A custom HTTP message handler that automatically attaches the JWT Bearer token 
+    /// to outgoing requests targeting secured API endpoints.
+    /// </summary>
+    public class AuthenticatedHttpHandler(AuthStateService authState) : DelegatingHandler
     {
-        private readonly AuthStateService _authState;
-
-        public AuthenticatedHttpHandler(AuthStateService authState)
-        {
-            _authState = authState;
-        }
-
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            if (!string.IsNullOrEmpty(_authState.AccessToken))
+            // Attach the access token to the Authorization header if the user is authenticated
+            if (!string.IsNullOrEmpty(authState.AccessToken))
             {
                 request.Headers.Authorization =
-                    new AuthenticationHeaderValue("Bearer", _authState.AccessToken);
+                    new AuthenticationHeaderValue("Bearer", authState.AccessToken);
             }
 
             return await base.SendAsync(request, cancellationToken);

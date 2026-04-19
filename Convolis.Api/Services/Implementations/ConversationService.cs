@@ -6,6 +6,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Convolis.Api.Services.Implementations
 {
+    /// <summary>
+    /// Manages chat conversations, including private 1-on-1 chats and the Global Chat.
+    /// Handles dynamic resolution of chat names and online participant counts.
+    /// </summary>
     public class ConversationService(ConvolisDbContext context, IOnlineTrackerService onlineTracker) : IConversationService
     {
         public async Task<(ConversationDTO? conversation, Guid? targetUserId)> CreateChatByUsernameAsync(
@@ -14,6 +18,7 @@ namespace Convolis.Api.Services.Implementations
             var targetUser = await context.Users
                 .FirstOrDefaultAsync(u => u.Username == targetUsername);
 
+            // Prevent creating a chat with a non-existent user or with oneself
             if (targetUser == null || targetUser.Id == currentUserId)
                 return (null, null);
 
@@ -58,6 +63,8 @@ namespace Convolis.Api.Services.Implementations
                 var isGlobal = x.Conversation.Id == ConvolisDbContext.GlobalChatId;
                 var allParticipantIds = x.AllParticipants.Select(p => p.UserId).ToList();
 
+                // Dynamically resolve the chat name:
+                // Global Chat has a fixed name, while 1-on-1 chats display the other participant's username.
                 string name;
                 if (isGlobal)
                     name = "Global Chat 🌍";
@@ -72,6 +79,7 @@ namespace Convolis.Api.Services.Implementations
                     Id = x.Conversation.Id,
                     Name = name,
                     ParticipantsCount = allParticipantIds.Count,
+                    // Calculate online users specifically for the Global Chat vs private chats
                     OnlineCount = isGlobal
                         ? onlineTracker.TotalOnlineGlobal()
                         : onlineTracker.GetOnlineCount(allParticipantIds),
@@ -84,6 +92,7 @@ namespace Convolis.Api.Services.Implementations
 
         public async Task<ConversationDetailsDTO?> GetConversationByIdAsync(Guid conversationId, Guid? sender)
         {
+            // Eagerly load messages and participants to map them to the DTO
             var conversation = await context.Conversations
                 .Include(c => c.Messages)
                 .ThenInclude(m => m.Sender)

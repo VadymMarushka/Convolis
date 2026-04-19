@@ -7,10 +7,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Convolis.Api.Services.Implementations
 {
+    /// <summary>
+    /// Handles message creation and integrates with Azure Cognitive Services 
+    /// to perform real-time sentiment analysis on message content.
+    /// </summary>
     public class MessageService(ConvolisDbContext context, TextAnalyticsClient aiClient) : IMessageService
     {
         public async Task<MessageDTO?> CreateMessageAsync(Guid senderId, Guid conversationId, string content)
         {
+            // Verify that the user is allowed to send messages to this conversation
             var isParticipant = await context.Participants
                 .AnyAsync(p => p.ConversationId == conversationId && p.UserId == senderId);
 
@@ -25,12 +30,13 @@ namespace Convolis.Api.Services.Implementations
             {
                 try
                 {
+                    // Evaluate message sentiment using Azure Text Analytics API
                     DocumentSentiment documentSentiment = await aiClient.AnalyzeSentimentAsync(content);
                     messageSentiment = documentSentiment.Sentiment.ToString();
                 }
                 catch (Exception)
                 {
-                    // Якщо, щось з AI-йкою піде не так - то буде просто Neutral
+                    // Fallback to "Neutral" if Azure Cognitive Services fails, is misconfigured, or unavailable
                 }
             }
 

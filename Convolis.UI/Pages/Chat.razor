@@ -389,6 +389,7 @@
 
         await LoadConversationsAsync();
 
+        // Subscribe to real-time SignalR events
         HubService.OnMessageReceived += OnMessageReceived;
         HubService.OnConversationStatusUpdated += OnStatusUpdated;
         HubService.OnConversationCreated += OnConversationCreated;
@@ -417,7 +418,7 @@
         selectedConvId = conv.Id;
         isLoadingMessages = true;
         currentMessages.Clear();
-        sidebarOpen = false; // close sidebar on mobile after selecting
+        sidebarOpen = false; // Close sidebar on mobile devices after selection
         StateHasChanged();
 
         var details = await ChatService.GetConversationAsync(conv.Id);
@@ -497,14 +498,11 @@
         showNewChat = false;
         newChatUsername = "";
 
-        // Restart hub so this user joins the new conversation group
-        // This also updates online counts for all chats
+        // Restart the SignalR hub connection to assign the current user to the newly created SignalR group
+        // This process also ensures online counts are synchronized across all chats
         await HubService.RestartAsync();
-
-        // Reload conversations to get fresh OnlineCount for the new chat
         await LoadConversationsAsync();
 
-        // Select the newly created conversation
         var fresh = conversations.FirstOrDefault(c => c.Id == conv.Id);
         if (fresh != null)
             await SelectConversation(fresh);
@@ -522,6 +520,10 @@
         Nav.NavigateTo("/login");
     }
 
+    /// <summary>
+    /// Delays slightly to allow the DOM to render the new message. 
+    /// Note: In a production scenario, this should ideally invoke a JavaScript interop function to scroll the container to its bottom scrollHeight.
+    /// </summary>
     private async Task ScrollToBottomAsync()
     {
         try { await Task.Delay(50); } catch { }
@@ -540,19 +542,23 @@
         _ => "😐"
     };
 
-    // When someone creates a chat with us — restart hub and reload so we join the group
+    /// <summary>
+    /// Triggered when another user initiates a 1-on-1 conversation with the current user.
+    /// Restarts the hub to join the new SignalR group and reloads the conversation list.
+    /// </summary>
     private void OnConversationCreated(Guid convId)
     {
         InvokeAsync(async () =>
         {
-            // Restart hub first so we get added to the new conversation group
             await HubService.RestartAsync();
             await LoadConversationsAsync();
             StateHasChanged();
         });
     }
 
-    // On SignalR reconnect — refresh online counts
+    /// <summary>
+    /// Refreshes online counts and conversation statuses automatically when the SignalR connection drops and reconnects.
+    /// </summary>
     private void OnHubReconnected()
     {
         InvokeAsync(async () =>
@@ -566,6 +572,7 @@
 
     public async ValueTask DisposeAsync()
     {
+        // Prevent memory leaks by unsubscribing from hub events when the component is destroyed
         HubService.OnMessageReceived -= OnMessageReceived;
         HubService.OnConversationStatusUpdated -= OnStatusUpdated;
         HubService.OnConversationCreated -= OnConversationCreated;

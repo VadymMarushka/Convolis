@@ -5,6 +5,10 @@ using System.Security.Claims;
 
 namespace Convolis.Api.Hubs
 {
+    /// <summary>
+    /// SignalR hub managing real-time bidirectional communication.
+    /// Handles connection lifecycles, user presence, and group-based event broadcasting.
+    /// </summary>
     [Authorize]
     public class ChatHub(
         IConversationService conversationService,
@@ -18,12 +22,14 @@ namespace Convolis.Api.Hubs
                 onlineTracker.UserConnected(userId.Value);
 
                 var userChats = await conversationService.GetUserConversationsAsync(userId.Value);
+
+                // Assign the connection to SignalR groups corresponding to the user's active conversations
                 foreach (var chat in userChats)
                 {
                     await Groups.AddToGroupAsync(Context.ConnectionId, chat.Id.ToString());
                 }
 
-                // Notify all chats that this user is now online
+                // Broadcast real-time presence updates to all participants in these conversations
                 foreach (var chat in userChats)
                 {
                     await Clients.Group(chat.Id.ToString()).SendAsync("UpdateConversationStatus", new
@@ -44,7 +50,7 @@ namespace Convolis.Api.Hubs
             {
                 onlineTracker.UserDisconnected(userId.Value);
 
-                // Fetch chats AFTER decrement so OnlineCount is already updated
+                // Fetch conversations AFTER the tracker decrement to broadcast the accurately updated online count
                 var userChats = await conversationService.GetUserConversationsAsync(userId.Value);
                 foreach (var chat in userChats)
                 {
@@ -59,11 +65,12 @@ namespace Convolis.Api.Hubs
             await base.OnDisconnectedAsync(exception);
         }
 
-        // Called by ConversationController after creating a new 1-on-1 chat
-        // Adds the target user to the new group and notifies them
+        /// <summary>
+        /// Invoked externally (e.g., from controllers) to notify a target user about a newly created 1-on-1 chat.
+        /// </summary>
         public async Task NotifyNewConversation(Guid targetUserId, Guid conversationId)
         {
-            // Find all active connections of the target user and add them to the new group
+            // Sends an event to all active connections (tabs/devices) belonging to the target user
             await Clients.User(targetUserId.ToString())
                 .SendAsync("ConversationCreated", conversationId);
         }
